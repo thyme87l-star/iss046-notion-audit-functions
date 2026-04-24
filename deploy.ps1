@@ -295,21 +295,25 @@ if (-not (Test-Path $funcAppDir)) {
     exit 1
 }
 
+# allowSharedKeyAccess 事前チェック
+$sharedKey = az storage account show `
+    --name $storageAccountName --resource-group $rgName `
+    --query allowSharedKeyAccess -o tsv 2>$null
+if ($sharedKey -eq 'false' -and $deployMethod -eq 'A') {
+    Write-Warn "allowSharedKeyAccess: false が検出されました。方法 B (Blob パッケージ) に自動切り替えします。"
+    $deployMethod = 'B'
+}
+
 if ($deployMethod -eq 'A') {
-    # --- 方法 A: func publish ---
+    # --- 方法 A: func publish (remote build) ---
     Write-Host "  方法 A: Azure Functions Core Tools でデプロイします..."
 
     Push-Location $funcAppDir
     try {
-        # 依存パッケージのインストール
-        Write-Host "  依存パッケージをインストール中..."
-        pip install -r requirements.txt `
-            --target .python_packages\lib\site-packages `
-            --upgrade -q 2>&1 | Out-Null
-
-        # デプロイ
-        Write-Host "  func publish を実行中..."
-        func azure functionapp publish $functionAppName 2>&1
+        # func publish は remote build で依存パッケージを自動インストールするため
+        # ローカルでの pip install は不要
+        Write-Host "  func publish (--build remote) を実行中..."
+        func azure functionapp publish $functionAppName --build remote 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Warn "func publish が失敗しました。allowSharedKeyAccess:false ポリシーの可能性があります。"
             Write-Host "  方法 B に切り替えますか？" -ForegroundColor Yellow
@@ -334,22 +338,40 @@ if ($deployMethod -eq 'B') {
 
     Push-Location $funcAppDir
     try {
-        # zip パッケージ作成
-        Write-Host "  zip パッケージを作成中..."
+        # zip パッケージ作成（Linux x86_64 向けにクロスビルド）
+        Write-Host "  zip パッケージを作成中（Linux x86_64 向け）..."
         python -c @"
-import zipfile, subprocess, os, sys
-subprocess.run([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt',
-    '--target', '.python_packages/lib/site-packages', '--upgrade', '-q'], check=True)
+import zipfile, subprocess, os, sys, shutil, tempfile
+build_dir = os.path.join(tempfile.gettempdir(), 'iss046_deploy_build')
+if os.path.exists(build_dir):
+    shutil.rmtree(build_dir)
+os.makedirs(build_dir)
+for f in ['function_app.py', 'host.json', 'requirements.txt']:
+    shutil.copy2(f, os.path.join(build_dir, f))
+req = os.path.join(build_dir, 'requirements.txt')
+print('  Installing dependencies for Linux x86_64...')
+r = subprocess.run([sys.executable, '-m', 'pip', 'install',
+    '--target', build_dir, '--platform', 'manylinux2014_x86_64',
+    '--python-version', '3.11', '--only-binary=:all:',
+    '-r', req, '--no-cache-dir', '-q'], capture_output=True, text=True)
+if r.returncode != 0:
+    print(f'  Platform-specific install note: {r.stderr.strip()}')
+    print('  Retrying without platform constraints (pure-python fallback)...')
+    subprocess.run([sys.executable, '-m', 'pip', 'install',
+        '--target', build_dir, '-r', req, '--no-cache-dir', '-q'], check=True)
+file_count = 0
 with zipfile.ZipFile('release.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
-    for f in ['function_app.py', 'host.json', 'requirements.txt']:
-        zf.write(f)
-    pkg_dir = '.python_packages/lib/site-packages'
-    for root, dirs, files in os.walk(pkg_dir):
+    for root, dirs, files in os.walk(build_dir):
+        dirs[:] = [d for d in dirs if d != '__pycache__' and not d.endswith('.dist-info')]
         for fn in files:
+            if fn.endswith('.pyc'):
+                continue
             full = os.path.join(root, fn)
-            arc = os.path.relpath(full, pkg_dir)
+            arc = os.path.relpath(full, build_dir).replace('\\', '/')
             zf.write(full, arc)
-print('Created release.zip')
+            file_count += 1
+size_mb = os.path.getsize('release.zip') / (1024*1024)
+print(f'  Created release.zip ({size_mb:.1f} MB, {file_count} files)')
 "@ 2>&1
 
         if ($LASTEXITCODE -ne 0) {
