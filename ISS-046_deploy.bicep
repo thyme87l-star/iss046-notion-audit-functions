@@ -1,13 +1,16 @@
-// ISS-046 Notion Audit Log Connector — Azure Functions Deployment
+// ISS-046 Notion Audit Log Connector — Azure Functions Deployment (v4)
 // =================================================================
 // Deploys: Function App (Python 3.11) + Storage Account + App Insights
-//          + Key Vault + DCE + DCR + Custom Table (NotionAuditLog_CL)
+//          + DCE + DCR + Custom Table (NotionAuditLog_CL)
+//
+// v4 変更点: Key Vault を廃止し、Notion Token を App Settings に直接格納する方式に変更。
+//            お客様環境の Azure Policy (publicNetworkAccess: Disabled 必須) に対応。
 //
 // Usage:
 //   az deployment group create \
 //     --resource-group <RG> \
 //     --template-file ISS-046_deploy.bicep \
-//     --parameters sentinelWorkspaceResourceId=<workspace-resource-id>
+//     --parameters sentinelWorkspaceResourceId=<workspace-resource-id> notionToken=<token>
 
 @description('Azure region for all resources')
 param location string = resourceGroup().location
@@ -20,6 +23,10 @@ param sentinelWorkspaceResourceId string
 
 @description('Polling interval in minutes')
 param pollingIntervalMinutes int = 5
+
+@secure()
+@description('Notion Internal Integration Token (stored in App Settings)')
+param notionToken string
 
 @description('Management ID tag (ISS-046)')
 param mgmtId string = 'ISS-046'
@@ -36,7 +43,6 @@ var uniqueSuffix = uniqueString(resourceGroup().id, baseName)
 var functionAppName = '${baseName}-func-${uniqueSuffix}'
 var storageAccountName = 'st${replace(baseName, '-', '')}${take(uniqueSuffix, 8)}'
 var appInsightsName = '${baseName}-ai-${uniqueSuffix}'
-var keyVaultName = 'kv-${baseName}-${take(uniqueSuffix, 8)}'
 var hostingPlanName = '${baseName}-plan-${uniqueSuffix}'
 var dceName = '${baseName}-dce-${uniqueSuffix}'
 var dcrName = '${baseName}-dcr-${uniqueSuffix}'
@@ -78,20 +84,6 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-// ---------- Key Vault ----------
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: keyVaultName
-  location: location
-  tags: tags
-  properties: {
-    sku: { family: 'A', name: 'standard' }
-    tenantId: subscription().tenantId
-    enableRbacAuthorization: true
-    enableSoftDelete: true
-    softDeleteRetentionInDays: 7
-  }
-}
-
 // ---------- Hosting Plan (Consumption) ----------
 resource hostingPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: hostingPlanName
@@ -128,8 +120,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'APPINSIGHTS_INSTRUMENTATIONKEY', value: appInsights.properties.InstrumentationKey }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
         { name: 'NOTION_API_BASE_URL', value: 'https://api.notion.com' }
-        { name: 'KEY_VAULT_URL', value: keyVault.properties.vaultUri }
-        { name: 'NOTION_TOKEN_SECRET_NAME', value: 'NotionIntegrationToken' }
+        { name: 'NOTION_TOKEN_DIRECT', value: notionToken }
         { name: 'DCE_ENDPOINT', value: dataCollectionEndpoint.properties.logsIngestion.endpoint }
         { name: 'DCR_IMMUTABLE_ID', value: dataCollectionRule.properties.immutableId }
         { name: 'DCR_STREAM_NAME', value: 'Custom-NotionAuditLog_CL' }
@@ -139,17 +130,6 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'AzureWebJobsFeatureFlags', value: 'EnableWorkerIndexing' }
       ]
     }
-  }
-}
-
-// ---------- Key Vault RBAC: Function App → Key Vault Secrets User ----------
-resource kvRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, functionApp.id, '4633458b-17de-408a-b874-0445c86b69e6')
-  scope: keyVault
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6') // Key Vault Secrets User
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 
@@ -238,8 +218,6 @@ resource dcrRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 // ---------- Outputs ----------
 output functionAppName string = functionApp.name
 output functionAppPrincipalId string = functionApp.identity.principalId
-output keyVaultName string = keyVault.name
-output keyVaultUri string = keyVault.properties.vaultUri
 output dceEndpoint string = dataCollectionEndpoint.properties.logsIngestion.endpoint
 output dcrImmutableId string = dataCollectionRule.properties.immutableId
 output storageAccountName string = storageAccount.name

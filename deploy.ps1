@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     ISS-046 Notion Audit Log → Sentinel: Azure Functions 自動展開スクリプト
 
@@ -39,7 +39,7 @@ function Write-Step {
     param([string]$StepNum, [string]$Title)
     Write-Host ""
     Write-Host "=" * 60 -ForegroundColor Cyan
-    Write-Host "  Step $StepNum: $Title" -ForegroundColor Cyan
+    Write-Host "  Step ${StepNum}: $Title" -ForegroundColor Cyan
     Write-Host "=" * 60 -ForegroundColor Cyan
 }
 
