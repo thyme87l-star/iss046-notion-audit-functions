@@ -1,5 +1,5 @@
-"""
-ISS-046 Build and Deploy Script
+﻿"""
+Notion Audit Build and Deploy Script
 Builds the Azure Functions deployment zip with correct structure for Linux Consumption.
 Packages dependencies flat at the root level (alongside function_app.py).
 Uses Python zipfile to ensure forward slashes in zip entries.
@@ -12,7 +12,7 @@ import zipfile
 import tempfile
 
 FUNC_DIR = os.path.dirname(os.path.abspath(__file__))
-FUNC_APP_DIR = os.path.join(FUNC_DIR, "ISS-046_function_app")
+FUNC_APP_DIR = os.path.join(FUNC_DIR, "function_app")
 BUILD_DIR = os.path.join(tempfile.gettempdir(), "iss046_func_build_v3")
 ZIP_PATH = os.path.join(tempfile.gettempdir(), "iss046_release_v3.zip")
 
@@ -20,7 +20,7 @@ STORAGE_ACCOUNT = "stnotionauditdrj4uph6"
 CONTAINER = "function-releases"
 BLOB_NAME = "release.zip"
 FUNC_NAME = "notion-audit-func-drj4uph6hbohg"
-RG = "ISS-046-Functions-RG"
+RG = "Notion-Audit-RG"
 
 
 def step_1_prepare_build():

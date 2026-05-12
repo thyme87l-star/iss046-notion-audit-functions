@@ -1,5 +1,5 @@
-{
-  "$schema": "ISS-046 Azure Functions Deployment Parameters",
+﻿{
+  "$schema": "Notion Audit Azure Functions Deployment Parameters",
   "$description": "このファイルにお客様環境の情報を記入し、deploy.ps1 を実行してください。",
 
   "azure": {

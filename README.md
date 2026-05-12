@@ -1,4 +1,4 @@
-# Notion Audit Log → Microsoft Sentinel (Azure Functions)
+﻿# Notion Audit Log → Microsoft Sentinel (Azure Functions)
 
 Notion の [Audit Log API](https://developers.notion.com/reference/get-audit-log) から監査ログを自動取得し、Microsoft Sentinel の `NotionAuditLog_CL` カスタムテーブルへインジェストする Azure Functions ソリューションです。
 
@@ -49,9 +49,9 @@ flowchart LR
 ```
 ├── params.json                          # パラメータテンプレート（最初にこれを編集）
 ├── deploy.ps1                           # ワンクリック展開スクリプト
-├── ISS-046_deploy.bicep                 # インフラ一括デプロイ（Func + Storage + AI + DCE/DCR + RBAC）
-├── ISS-046_build_and_deploy.py          # 方法 B 用 zip ビルド & デプロイ自動化
-└── ISS-046_function_app/
+├── deploy.bicep                 # インフラ一括デプロイ（Func + Storage + AI + DCE/DCR + RBAC）
+├── build_and_deploy.py          # 方法 B 用 zip ビルド & デプロイ自動化
+└── function_app/
     ├── function_app.py                  # Timer Trigger: Notion API → スキーマ変換 → Logs Ingestion API
     ├── requirements.txt                 # Python 依存パッケージ
     └── host.json                        # Functions ランタイム設定
@@ -145,7 +145,7 @@ az group create --name Notion-Audit-Func-RG --location japaneast
 
 az deployment group create `
   --resource-group Notion-Audit-Func-RG `
-  --template-file ISS-046_deploy.bicep `
+  --template-file deploy.bicep `
   --parameters `
     sentinelWorkspaceResourceId="<WORKSPACE_RESOURCE_ID>" `
     notionToken="<NOTION_INTEGRATION_TOKEN>"
@@ -156,7 +156,7 @@ az deployment group create `
 ### コードデプロイ — 方法 A (標準環境)
 
 ```powershell
-cd ISS-046_function_app
+cd function_app
 func azure functionapp publish <FUNCTION_APP_NAME> --build remote
 ```
 
@@ -164,7 +164,7 @@ func azure functionapp publish <FUNCTION_APP_NAME> --build remote
 
 ### コードデプロイ — 方法 B (allowSharedKeyAccess: false 環境)
 
-`ISS-046_build_and_deploy.py` を使うか、以下の手順で zip パッケージをデプロイします:
+`build_and_deploy.py` を使うか、以下の手順で zip パッケージをデプロイします:
 
 1. Linux x86_64 クロスビルドで zip を作成 (`--platform manylinux2014_x86_64`)
 2. Blob Storage にアップロード (`az storage blob upload --auth-mode login`)

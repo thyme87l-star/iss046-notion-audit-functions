@@ -1,4 +1,4 @@
-// ISS-046 Notion Audit Log Connector — Azure Functions Deployment (v4)
+﻿// Notion Audit Log Connector — Azure Functions Deployment (v4)
 // =================================================================
 // Deploys: Function App (Python 3.11) + Storage Account + App Insights
 //          + DCE + DCR + Custom Table (NotionAuditLog_CL)
@@ -9,7 +9,7 @@
 // Usage:
 //   az deployment group create \
 //     --resource-group <RG> \
-//     --template-file ISS-046_deploy.bicep \
+//     --template-file deploy.bicep \
 //     --parameters sentinelWorkspaceResourceId=<workspace-resource-id> notionToken=<token>
 
 @description('Azure region for all resources')
@@ -28,8 +28,8 @@ param pollingIntervalMinutes int = 5
 @description('Notion Internal Integration Token (stored in App Settings)')
 param notionToken string
 
-@description('Management ID tag (ISS-046)')
-param mgmtId string = 'ISS-046'
+@description('Management ID tag')
+param mgmtId string = 'notion-audit'
 
 // Common tags
 var tags = {
